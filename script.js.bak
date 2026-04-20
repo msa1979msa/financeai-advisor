@@ -1,0 +1,380 @@
+/* ═══════════════════════════════════════════════
+   FinanceAI — Frontend Logic
+   ═══════════════════════════════════════════════ */
+
+const API_BASE = 'http://localhost:8000';
+
+let chatHistory   = [];
+let isTyping      = false;
+let activeTicker  = null;
+
+// ── Init ──────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  setWelcomeTime();
+  checkHealth();
+  setInterval(checkHealth, 30_000);
+});
+
+function setWelcomeTime() {
+  const el = document.getElementById('welcomeTime');
+  if (el) el.textContent = formatTime(new Date());
+}
+
+// ── Health check ──────────────────────────────
+async function checkHealth() {
+  const dot  = document.querySelector('.status-dot');
+  const text = document.querySelector('.status-text');
+  try {
+    const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(5000) });
+    if (res.ok) {
+      const d = await res.json();
+      dot.className  = 'status-dot online';
+      text.textContent = d.rag && d.ml ? 'All systems ready' : 'Partial startup…';
+    } else throw new Error();
+  } catch {
+    dot.className  = 'status-dot error';
+    text.textContent = 'Backend offline';
+  }
+}
+
+// ── Send message ──────────────────────────────
+async function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const text  = input.value.trim();
+  if (!text || isTyping) return;
+
+  addUserMessage(text);
+  input.value = '';
+  autoResize(input);
+  document.getElementById('sendBtn').disabled = true;
+
+  chatHistory.push({ role: 'user', content: text });
+  showTyping();
+
+  try {
+    const res = await fetch(`${API_BASE}/chat`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ message: text, history: chatHistory.slice(-8) }),
+    });
+
+    if (!res.ok) throw new Error(`API error ${res.status}`);
+    const data = await res.json();
+
+    hideTyping();
+    addAssistantMessage(data.response, data.prediction, data.sources);
+    chatHistory.push({ role: 'assistant', content: data.response });
+
+    // Update right panel prediction if present
+    if (data.prediction) updatePredictionCard(data.prediction);
+
+    // Update sources
+    if (data.sources?.length) updateSources(data.sources);
+
+  } catch (err) {
+    hideTyping();
+    addErrorMessage('Could not reach the backend. Is the server running on port 8000?');
+    console.error(err);
+  }
+
+  document.getElementById('sendBtn').disabled = false;
+}
+
+function handleKeyDown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+// ── Message rendering ─────────────────────────
+function addUserMessage(text) {
+  const container = document.getElementById('chatMessages');
+  const row = document.createElement('div');
+  row.className = 'message-row user-row';
+  row.innerHTML = `
+    <div class="avatar-wrap">
+      <div class="avatar avatar-user">U</div>
+    </div>
+    <div class="message-bubble user-bubble">
+      <div class="bubble-header">You <span class="bubble-time">${formatTime(new Date())}</span></div>
+      <div class="bubble-body">${escapeHtml(text)}</div>
+    </div>`;
+  container.appendChild(row);
+  scrollToBottom();
+}
+
+function addAssistantMessage(text, prediction, sources) {
+  const container = document.getElementById('chatMessages');
+  const row = document.createElement('div');
+  row.className = 'message-row assistant-row';
+
+  let predHtml = '';
+  if (prediction) {
+    const isUp     = prediction.prediction.includes('UP');
+    const dirClass = isUp ? 'up' : 'down';
+    const sigClass = prediction.signal === 'BUY' ? 'buy' : 'sell';
+    const riskClass = prediction.risk_level.includes('Low') ? 'risk-low'
+                    : prediction.risk_level.includes('Moderate') ? 'risk-mod' : 'risk-high';
+    predHtml = `
+      <div class="chat-pred-block">
+        <div class="cpb-title">ML Prediction</div>
+        <div class="cpb-row">
+          <span class="cpb-ticker">${prediction.ticker}</span>
+          <span class="cpb-dir ${dirClass}">${prediction.prediction}</span>
+          <span class="cpb-conf">${prediction.confidence}% conf.</span>
+          <span class="cpb-signal ${sigClass}">${prediction.signal}</span>
+        </div>
+        <div class="risk-badge ${riskClass}">⚑ ${prediction.risk_level}</div>
+      </div>`;
+  }
+
+  row.innerHTML = `
+    <div class="avatar-wrap">
+      <div class="avatar avatar-ai">
+        <svg width="16" height="16" viewBox="0 0 28 28" fill="none">
+          <path d="M4 20 L14 6 L24 20" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="14" cy="23" r="2" fill="white"/>
+        </svg>
+      </div>
+    </div>
+    <div class="message-bubble assistant-bubble">
+      <div class="bubble-header">FinanceAI <span class="bubble-time">${formatTime(new Date())}</span></div>
+      ${predHtml}
+      <div class="bubble-body">${renderMarkdown(text)}</div>
+    </div>`;
+  container.appendChild(row);
+  scrollToBottom();
+}
+
+function addErrorMessage(msg) {
+  const container = document.getElementById('chatMessages');
+  const row = document.createElement('div');
+  row.className = 'message-row assistant-row';
+  row.innerHTML = `
+    <div class="avatar-wrap"><div class="avatar avatar-ai">⚠</div></div>
+    <div class="message-bubble assistant-bubble" style="border-color:var(--red)">
+      <div class="bubble-header" style="color:var(--red)">Error</div>
+      <div class="bubble-body" style="color:var(--red)">${escapeHtml(msg)}</div>
+    </div>`;
+  container.appendChild(row);
+  scrollToBottom();
+}
+
+// ── Typing indicator ──────────────────────────
+function showTyping() {
+  isTyping = true;
+  const container = document.getElementById('chatMessages');
+  const row = document.createElement('div');
+  row.className = 'message-row assistant-row';
+  row.id = 'typingRow';
+  row.innerHTML = `
+    <div class="avatar-wrap">
+      <div class="avatar avatar-ai">
+        <svg width="16" height="16" viewBox="0 0 28 28" fill="none">
+          <path d="M4 20 L14 6 L24 20" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="14" cy="23" r="2" fill="white"/>
+        </svg>
+      </div>
+    </div>
+    <div class="message-bubble assistant-bubble">
+      <div class="typing-indicator">
+        <span class="typing-dot"></span>
+        <span class="typing-dot"></span>
+        <span class="typing-dot"></span>
+      </div>
+    </div>`;
+  container.appendChild(row);
+  scrollToBottom();
+}
+
+function hideTyping() {
+  isTyping = false;
+  const row = document.getElementById('typingRow');
+  if (row) row.remove();
+}
+
+// ── Prediction panel ──────────────────────────
+async function loadPrediction(ticker) {
+  // Highlight active ticker
+  document.querySelectorAll('.ticker-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[data-ticker="${ticker}"]`)?.classList.add('active');
+  activeTicker = ticker;
+
+  const card = document.getElementById('predictionCard');
+  card.innerHTML = `
+    <div class="pred-loading">
+      <div class="spinner"></div>
+      <p>Fetching ${ticker} prediction…</p>
+    </div>`;
+
+  try {
+    const res  = await fetch(`${API_BASE}/predict/${ticker}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    updatePredictionCard(data);
+    updateMetrics(data.explanation);
+  } catch (err) {
+    card.innerHTML = `<p style="color:var(--red);font-size:12px;padding:8px 0;">Failed to fetch prediction: ${err.message}</p>`;
+  }
+}
+
+function updatePredictionCard(pred) {
+  const card   = document.getElementById('predictionCard');
+  const isUp   = pred.prediction?.includes('UP');
+  const dClass = isUp ? 'up' : 'down';
+  const sClass = pred.signal === 'BUY' ? 'buy' : 'sell';
+  const conf   = pred.confidence || 0;
+
+  card.innerHTML = `
+    <div class="pred-header">
+      <span class="pred-ticker">${pred.ticker}</span>
+      <span class="pred-date">${pred.date || ''}</span>
+    </div>
+    <div class="pred-direction ${dClass}">${pred.prediction}</div>
+    <div class="pred-confidence">
+      <div class="conf-label">
+        <span>Confidence</span>
+        <span>${conf}%</span>
+      </div>
+      <div class="conf-bar-track">
+        <div class="conf-bar-fill ${dClass}" style="width:${conf}%"></div>
+      </div>
+    </div>
+    <div class="pred-probs">
+      <div class="prob-item">
+        <div class="prob-label">📈 Up</div>
+        <div class="prob-val up">${pred.up_prob}%</div>
+      </div>
+      <div class="prob-item">
+        <div class="prob-label">📉 Down</div>
+        <div class="prob-val down">${pred.down_prob}%</div>
+      </div>
+    </div>
+    <div class="pred-signal">
+      <span class="signal-label">Signal</span>
+      <span class="signal-badge ${sClass}">${pred.signal}</span>
+    </div>
+    <div class="pred-price">Last price: <span>$${pred.last_price}</span></div>
+  `;
+}
+
+function updateMetrics(explanation) {
+  if (!explanation?.current_metrics) return;
+  const m = explanation.current_metrics;
+  const grid = document.getElementById('metricsGrid');
+  const entries = Object.entries(m);
+  grid.innerHTML = entries.map(([k, v]) => `
+    <div class="metric-item">
+      <span class="metric-label">${k}</span>
+      <span class="metric-value mono">${v}</span>
+    </div>`).join('') +
+    `<div class="metric-item">
+      <span class="metric-label">Model</span>
+      <span class="metric-value mono">RF+GB</span>
+    </div>
+    <div class="metric-item">
+      <span class="metric-label">Features</span>
+      <span class="metric-value mono">14</span>
+    </div>`;
+}
+
+// ── Sources panel ─────────────────────────────
+function updateSources(sources) {
+  const el = document.getElementById('sourcesList');
+  el.innerHTML = sources.map(s => {
+    const isNews = s.text.startsWith('[NEWS]');
+    return `
+      <div class="source-item">
+        <span class="source-score">${(s.score * 100).toFixed(0)}%</span>
+        <div class="source-text ${isNews ? 'news' : ''}">${escapeHtml(s.text.replace('[NEWS] ', ''))}</div>
+      </div>`;
+  }).join('');
+}
+
+// ── Utility: send suggestion ──────────────────
+function sendSuggestion(text) {
+  const input = document.getElementById('chatInput');
+  input.value = text;
+  autoResize(input);
+  sendMessage();
+}
+
+// ── Utility: clear chat ───────────────────────
+function clearChat() {
+  const container = document.getElementById('chatMessages');
+  container.innerHTML = '';
+  chatHistory = [];
+
+  // Restore welcome message
+  const row = document.createElement('div');
+  row.className = 'message-row assistant-row';
+  row.innerHTML = `
+    <div class="avatar-wrap">
+      <div class="avatar avatar-ai">
+        <svg width="16" height="16" viewBox="0 0 28 28" fill="none">
+          <path d="M4 20 L14 6 L24 20" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="14" cy="23" r="2" fill="white"/>
+        </svg>
+      </div>
+    </div>
+    <div class="message-bubble assistant-bubble">
+      <div class="bubble-header">FinanceAI <span class="bubble-time">${formatTime(new Date())}</span></div>
+      <div class="bubble-body">
+        <p>Chat cleared. How can I help you with your financial questions?</p>
+      </div>
+    </div>`;
+  container.appendChild(row);
+}
+
+// ── Utility: refresh news ─────────────────────
+async function refreshNews() {
+  const btn = document.querySelector('.refresh-btn');
+  btn.style.opacity = '0.5';
+  try {
+    await fetch(`${API_BASE}/refresh-news`, { method: 'POST' });
+    showToast('Market news refreshed and indexed ✓', 'success');
+  } catch {
+    showToast('Failed to refresh news', 'error');
+  }
+  btn.style.opacity = '1';
+}
+
+// ── Utility: markdown renderer ────────────────
+function renderMarkdown(text) {
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`(.+?)`/g, '<code>$1</code>')
+    .replace(/^#{1,3}\s+(.+)$/gm, '<strong>$1</strong>')
+    .replace(/^[-*]\s+(.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/^(?!<)(.+)$/gm, (m) => m.startsWith('<') ? m : `<p>${m}</p>`)
+    .replace(/<p><\/p>/g, '');
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatTime(d) {
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function scrollToBottom() {
+  const el = document.getElementById('chatMessages');
+  el.scrollTop = el.scrollHeight;
+}
+
+function showToast(msg, type = 'error') {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.style.borderColor = type === 'success' ? 'var(--green)' : 'var(--red)';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}

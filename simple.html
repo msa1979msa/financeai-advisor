@@ -1,0 +1,200 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>FinanceAI - Simple Working Version</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #0a0a0f;
+            color: #e0e0e0;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .sidebar {
+            width: 250px;
+            background: #1a1a2e;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        .chat-area {
+            flex: 1;
+            background: #1a1a2e;
+            padding: 20px;
+            border-radius: 10px;
+            min-height: 500px;
+        }
+        .right-panel {
+            width: 300px;
+            background: #1a1a2e;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        button {
+            background: #2a2a3e;
+            color: white;
+            border: none;
+            padding: 10px;
+            margin: 5px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        button:hover {
+            background: #3a3a4e;
+        }
+        .ticker-btn {
+            width: 70px;
+        }
+        .chat-messages {
+            height: 400px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            border: 1px solid #333;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .user-msg {
+            text-align: right;
+            color: #00ff88;
+            margin: 10px;
+        }
+        .bot-msg {
+            text-align: left;
+            color: #ffaa00;
+            margin: 10px;
+        }
+        input, textarea {
+            width: 80%;
+            padding: 10px;
+            background: #2a2a3e;
+            color: white;
+            border: 1px solid #444;
+            border-radius: 5px;
+        }
+        .prediction-card {
+            background: #2a2a3e;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        .direction-up { color: #00ff88; font-size: 24px; }
+        .direction-down { color: #ff4444; font-size: 24px; }
+    </style>
+</head>
+<body>
+    <h1>FinanceAI Advisor</h1>
+    <div class="container">
+        <div class="sidebar">
+            <h3>Quick Predictions</h3>
+            <div>
+                <button class="ticker-btn" onclick="getPrediction('AAPL')">AAPL</button>
+                <button class="ticker-btn" onclick="getPrediction('MSFT')">MSFT</button>
+                <button class="ticker-btn" onclick="getPrediction('GOOGL')">GOOGL</button>
+                <button class="ticker-btn" onclick="getPrediction('NVDA')">NVDA</button>
+                <button class="ticker-btn" onclick="getPrediction('META')">META</button>
+                <button class="ticker-btn" onclick="getPrediction('TSLA')">TSLA</button>
+                <button class="ticker-btn" onclick="getPrediction('AMZN')">AMZN</button>
+                <button class="ticker-btn" onclick="getPrediction('AMD')">AMD</button>
+            </div>
+        </div>
+
+        <div class="chat-area">
+            <h3>Chat</h3>
+            <div class="chat-messages" id="chatMessages">
+                <div class="bot-msg">Welcome to FinanceAI! Ask me about stocks or click a ticker button.</div>
+            </div>
+            <input type="text" id="messageInput" placeholder="Ask a question..." style="width: 70%;">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+
+        <div class="right-panel">
+            <h3>Live Prediction</h3>
+            <div id="predictionDisplay" class="prediction-card">
+                Click a ticker to see prediction
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://127.0.0.1:8000';
+        
+        async function getPrediction(ticker) {
+            try {
+                const response = await fetch(`${API_URL}/predict/${ticker}`);
+                if (!response.ok) throw new Error('Prediction failed');
+                const data = await response.json();
+                
+                const display = document.getElementById('predictionDisplay');
+                display.innerHTML = `
+                    <div style="text-align: center">
+                        <h2>${data.ticker}</h2>
+                        <div class="direction-${data.direction.toLowerCase()}">${data.direction}</div>
+                        <div>Confidence: ${data.confidence}%</div>
+                        <div>Signal: ${data.signal || (data.direction === 'UP' ? 'BUY' : 'SELL')}</div>
+                        <div>Risk: ${data.risk || 'Medium'}</div>
+                        <div style="margin-top: 10px;">
+                            <div>▲ UP: ${data.direction === 'UP' ? data.confidence : (100 - data.confidence)}%</div>
+                            <div>▼ DOWN: ${data.direction === 'DOWN' ? data.confidence : (100 - data.confidence)}%</div>
+                        </div>
+                    </div>
+                `;
+                
+                addToChat(`📊 ${ticker} Prediction: ${data.direction} with ${data.confidence}% confidence`, 'bot');
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('predictionDisplay').innerHTML = 'Error fetching prediction. Is the server running?';
+            }
+        }
+        
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            if (!message) return;
+            
+            addToChat(message, 'user');
+            input.value = '';
+            
+            try {
+                const response = await fetch(`${API_URL}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: message })
+                });
+                
+                if (!response.ok) throw new Error('Chat failed');
+                const data = await response.json();
+                addToChat(data.response || data.message || 'No response', 'bot');
+            } catch (error) {
+                addToChat('Error: ' + error.message, 'bot');
+            }
+        }
+        
+        function addToChat(text, sender) {
+            const chatDiv = document.getElementById('chatMessages');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = sender === 'user' ? 'user-msg' : 'bot-msg';
+            msgDiv.innerHTML = `<strong>${sender === 'user' ? 'You' : 'AI'}:</strong> ${text}`;
+            chatDiv.appendChild(msgDiv);
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+        }
+        
+        // Test server connection
+        async function testConnection() {
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                if (response.ok) {
+                    addToChat('✅ Connected to FinanceAI server!', 'bot');
+                }
+            } catch (error) {
+                addToChat('❌ Cannot connect to server. Make sure the backend is running on port 8000', 'bot');
+            }
+        }
+        
+        testConnection();
+    </script>
+</body>
+</html>

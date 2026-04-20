@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FinanceAI — Intelligent Financial Advisor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="ambient-grid"></div>
+  <div class="ambient-orb orb-1"></div>
+  <div class="ambient-orb orb-2"></div>
+
+  <div class="app-shell">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-mark">
+          <svg width="26" height="26" viewBox="0 0 28 28" fill="none">
+            <path d="M4 20 L14 6 L24 20" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="14" cy="24" r="2" fill="var(--accent)"/>
+          </svg>
+        </div>
+        <div class="logo-text">
+          <span class="logo-name">FinanceAI</span>
+          <span class="logo-sub">Advisor v1.0</span>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <span class="sidebar-label">Quick Predictions</span>
+        <div class="ticker-grid">
+          <button class="ticker-btn" data-ticker="AAPL"  onclick="loadPrediction('AAPL')">AAPL</button>
+          <button class="ticker-btn" data-ticker="MSFT"  onclick="loadPrediction('MSFT')">MSFT</button>
+          <button class="ticker-btn" data-ticker="GOOGL" onclick="loadPrediction('GOOGL')">GOOGL</button>
+          <button class="ticker-btn" data-ticker="NVDA"  onclick="loadPrediction('NVDA')">NVDA</button>
+          <button class="ticker-btn" data-ticker="META"  onclick="loadPrediction('META')">META</button>
+          <button class="ticker-btn" data-ticker="TSLA"  onclick="loadPrediction('TSLA')">TSLA</button>
+          <button class="ticker-btn" data-ticker="AMZN"  onclick="loadPrediction('AMZN')">AMZN</button>
+          <button class="ticker-btn" data-ticker="AMD"   onclick="loadPrediction('AMD')">AMD</button>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <span class="sidebar-label">Suggested Questions</span>
+        <div class="suggestion-list">
+          <button class="suggestion-chip" onclick="sendSuggestion('Should I invest in tech stocks this quarter?')">
+            <span class="chip-icon">🤔</span> Tech stocks this quarter?
+          </button>
+          <button class="suggestion-chip" onclick="sendSuggestion('What is the NVIDIA stock prediction for tomorrow?')">
+            <span class="chip-icon">📈</span> NVDA tomorrow prediction
+          </button>
+          <button class="suggestion-chip" onclick="sendSuggestion('How does Fed interest rate affect stock prices?')">
+            <span class="chip-icon">🏦</span> Fed rate impact
+          </button>
+          <button class="suggestion-chip" onclick="sendSuggestion('What is dollar cost averaging?')">
+            <span class="chip-icon">💡</span> What is DCA?
+          </button>
+          <button class="suggestion-chip" onclick="sendSuggestion('Should I buy or sell Apple stock right now?')">
+            <span class="chip-icon">🍎</span> Buy or sell Apple?
+          </button>
+          <button class="suggestion-chip" onclick="sendSuggestion('How do I build a diversified investment portfolio?')">
+            <span class="chip-icon">🗂️</span> Diversified portfolio
+          </button>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="status-indicator">
+          <span class="status-dot" id="statusDot"></span>
+          <span class="status-text" id="statusText">Connecting…</span>
+        </div>
+        <button class="refresh-btn" onclick="refreshNews()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"/>
+            <polyline points="1 20 1 14 7 14"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+          Refresh News
+        </button>
+      </div>
+    </aside>
+
+    <!-- MAIN CHAT -->
+    <main class="chat-main">
+      <header class="chat-header">
+        <div class="header-left">
+          <h1 class="header-title">Financial Intelligence</h1>
+          <p class="header-sub">RAG-powered insights · ML predictions · Real-time data</p>
+        </div>
+        <div class="header-controls">
+          <button class="ctrl-btn" onclick="clearChat()" title="Clear conversation">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14H6L5 6"/>
+              <path d="M10 11v6M14 11v6"/>
+              <path d="M9 6V4h6v2"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="chat-messages" id="chatMessages">
+        <div class="message-row assistant-row">
+          <div class="avatar-wrap">
+            <div class="avatar avatar-ai">
+              <svg width="16" height="16" viewBox="0 0 28 28" fill="none">
+                <path d="M4 20 L14 6 L24 20" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="14" cy="23" r="2" fill="white"/>
+              </svg>
+            </div>
+          </div>
+          <div class="message-bubble assistant-bubble">
+            <div class="bubble-header">FinanceAI <span class="bubble-time" id="welcomeTime"></span></div>
+            <div class="bubble-body">
+              <p>Welcome! I'm your <strong>AI-powered financial advisor</strong> combining real-time RAG retrieval with ML prediction models.</p>
+              <p>I can help you with:</p>
+              <ul>
+                <li>📊 <strong>Stock predictions</strong> — next-day movement forecasts with confidence scores</li>
+                <li>📚 <strong>Financial education</strong> — concepts, strategies, market dynamics</li>
+                <li>🔍 <strong>Market analysis</strong> — sector trends, macro factors, tech stocks</li>
+                <li>💼 <strong>Portfolio guidance</strong> — diversification, risk management</li>
+              </ul>
+              <p>Click a ticker on the left or try: <em>"Should I invest in NVIDIA this quarter?"</em></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-input-area">
+        <div class="input-wrapper">
+          <textarea
+            id="chatInput"
+            class="chat-input"
+            placeholder="Ask me about stocks, investments, market trends…"
+            rows="1"
+            onkeydown="handleKeyDown(event)"
+            oninput="autoResize(this)"
+          ></textarea>
+          <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <line x1="22" y1="2" x2="11" y2="13" stroke="#0a0c10" stroke-width="2.2" stroke-linecap="round"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2" fill="#0a0c10"/>
+            </svg>
+          </button>
+        </div>
+        <p class="input-disclaimer">FinanceAI provides educational insights, not licensed financial advice. Always consult a qualified advisor.</p>
+      </div>
+    </main>
+
+    <!-- RIGHT PANEL -->
+    <aside class="right-panel">
+      <div class="panel-section">
+        <div class="panel-title">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+          Live Prediction
+        </div>
+        <div class="prediction-card" id="predictionCard">
+          <div class="pred-placeholder">
+            <div class="pred-icon">📊</div>
+            <p>Click a ticker or ask about a stock to see ML predictions</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-title">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          Market Metrics
+        </div>
+        <div class="metrics-grid" id="metricsGrid">
+          <div class="metric-item"><span class="metric-label">Model Type</span><span class="metric-value mono">RF + GB</span></div>
+          <div class="metric-item"><span class="metric-label">Features</span><span class="metric-value mono">14 indicators</span></div>
+          <div class="metric-item"><span class="metric-label">Knowledge Base</span><span class="metric-value mono">50+ concepts</span></div>
+          <div class="metric-item"><span class="metric-label">Data Source</span><span class="metric-value mono">yfinance</span></div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-title">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          Sources Retrieved
+        </div>
+        <div class="sources-list" id="sourcesList">
+          <p class="sources-empty">Sources appear here after each query</p>
+        </div>
+      </div>
+    </aside>
+
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
